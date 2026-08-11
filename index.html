@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Học Từ Vựng Google Sheets</title>
-  <!-- Thư viện PapaParse để đọc dữ liệu CSV từ Google Sheets -->
+  <title>Trắc Nghiệm Từ Vựng Tiếng Anh - Google Sheets</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
     :root {
@@ -13,6 +12,8 @@
       --bg: #f3f4f6;
       --card-bg: #ffffff;
       --text: #1f2937;
+      --success: #10b981;
+      --danger: #ef4444;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
@@ -21,6 +22,7 @@
     .container { width: 100%; max-width: 600px; background: var(--card-bg); padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
     h1 { text-align: center; color: var(--primary); margin-bottom: 20px; font-size: 1.5rem; }
 
+    /* Configuration Panel */
     .config-panel { background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
     .config-panel label { font-size: 0.85rem; font-weight: 600; color: #64748b; display: block; margin-bottom: 6px; }
     .input-group { display: flex; gap: 8px; }
@@ -29,21 +31,27 @@
 
     .btn { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
     .btn:hover { background: var(--primary-hover); }
-    .btn-secondary { background: #e2e8f0; color: #475569; }
-    .btn-audio { background: #10b981; }
+    .btn-audio { background: #10b981; border: none; color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.85rem; cursor: pointer; margin-top: 8px; }
 
-    /* Flashcard Style */
+    /* Question Card */
     .card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 20px; }
-    .meaning-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
-    .pos-tag { background: #e0e7ff; color: #4338ca; font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; text-transform: lowercase; }
-    .meaning { font-size: 1.3rem; font-weight: bold; color: #0f172a; }
-    .phonetic { color: #64748b; margin-top: 6px; font-size: 1rem; }
-    .example { font-style: italic; color: #475569; margin-top: 10px; font-size: 0.95rem; }
+    .english-word { font-size: 2rem; font-weight: bold; color: var(--primary); }
+    .meta-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; }
+    .pos-tag { background: #e0e7ff; color: #4338ca; font-size: 0.85rem; font-weight: 700; padding: 2px 10px; border-radius: 12px; text-transform: lowercase; }
+    .phonetic { color: #64748b; font-size: 1rem; }
 
-    .word-input { width: 100%; font-size: 1.2rem; text-align: center; padding: 12px; border: 2px solid #cbd5e1; border-radius: 8px; outline: none; }
-    .word-input:focus { border-color: var(--primary); }
+    /* Multiple Choice Options */
+    .options-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
+    .option-btn { background: #ffffff; border: 2px solid #e2e8f0; padding: 14px 18px; border-radius: 10px; text-align: left; font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; }
+    .option-btn:hover:not([disabled]) { border-color: var(--primary); background: #f0f5ff; }
+    .option-prefix { font-weight: bold; color: var(--primary); margin-right: 12px; width: 24px; }
 
-    .controls { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+    /* Option States */
+    .option-btn.correct { background-color: #d1fae5 !important; border-color: var(--success) !important; color: #065f46; }
+    .option-btn.wrong { background-color: #fee2e2 !important; border-color: var(--danger) !important; color: #991b1b; }
+
+    /* Controls & Progress */
+    .controls { display: flex; justify-content: space-between; align-items: center; }
     .score { font-weight: 600; color: #059669; }
     .hidden { display: none; }
     .loading { text-align: center; color: #64748b; margin: 10px 0; }
@@ -52,7 +60,7 @@
 <body>
 
 <div class="container">
-  <h1>Học Từ Vựng Google Sheets</h1>
+  <h1>Trắc Nghiệm Từ Vựng</h1>
 
   <!-- Configuration Panel -->
   <div class="config-panel">
@@ -63,30 +71,25 @@
     </div>
   </div>
 
-  <div id="loading" class="loading hidden">Đang tải dữ liệu từ Google Sheets...</div>
+  <div id="loading" class="loading hidden">Đang tải từ vựng từ Google Sheets...</div>
 
   <!-- Quiz Area -->
   <div id="quiz-area" class="hidden">
     <div class="card">
-      <div class="meaning-row">
+      <div class="english-word" id="word-text">Word</div>
+      <div class="meta-row">
         <span class="pos-tag hidden" id="pos-text">n</span>
-        <span class="meaning" id="meaning-text">Ý nghĩa từ vựng</span>
+        <span class="phonetic" id="phonetic-text">/phonetic/</span>
       </div>
-      <div class="phonetic" id="phonetic-text">/phiên âm/</div>
-      <div class="example" id="example-text">Ví dụ...</div>
+      <button class="btn-audio" onclick="speakCurrentWord()">🔊 Phát âm</button>
     </div>
 
-    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
-      <input type="text" id="user-input" class="word-input" placeholder="Gõ từ tiếng Anh tương ứng..." autocomplete="off">
-      <button class="btn btn-audio" onclick="speakCurrentWord()">🔊 Phát âm</button>
-    </div>
+    <!-- 4 Đáp án A B C D -->
+    <div class="options-grid" id="options-container"></div>
 
     <div class="controls">
       <div class="score">Tiến độ: <span id="score-val">0</span>/<span id="total-val">0</span></div>
-      <div>
-        <button class="btn btn-secondary" onclick="skipWord()">Bỏ qua</button>
-        <button class="btn" onclick="checkAnswer()">Kiểm tra</button>
-      </div>
+      <button class="btn" id="next-btn" style="visibility: hidden;" onclick="nextQuestion()">Câu tiếp theo ➔</button>
     </div>
   </div>
 </div>
@@ -95,6 +98,7 @@
   let words = [];
   let currentIndex = 0;
   let score = 0;
+  let isAnswered = false;
 
   window.onload = function() {
     const savedUrl = localStorage.getItem("gg_sheet_csv_url");
@@ -111,12 +115,9 @@
     fetchGoogleSheetData(url);
   }
 
-  // Hàm hỗ trợ tìm giá trị theo nhiều khả năng tên cột
   function getFieldValue(item, keys) {
     for (let key of keys) {
-      if (item[key] !== undefined && item[key] !== "") {
-        return item[key];
-      }
+      if (item[key] !== undefined && item[key] !== "") return item[key];
     }
     return "";
   }
@@ -134,49 +135,48 @@
         
         words = results.data.map(row => {
           let cleanRow = {};
-          for (let key in row) {
-            cleanRow[key.trim().toLowerCase()] = row[key].trim();
-          }
+          for (let key in row) cleanRow[key.trim().toLowerCase()] = row[key].trim();
           return cleanRow;
-        }).filter(item => getFieldValue(item, ["word", "tu_vung", "tuvung"]));
+        }).filter(item => getFieldValue(item, ["word", "tu_vung", "tuvung"]) && getFieldValue(item, ["meaning", "nghia"]));
 
-        if (words.length > 0) {
+        if (words.length >= 4) {
           startQuiz();
         } else {
-          alert("Không tìm thấy từ vựng! Kiểm tra lại file Google Sheets.");
+          alert("Danh sách cần ít nhất 4 từ vựng để tạo bài trắc nghiệm ABCD!");
         }
       },
       error: function() {
         document.getElementById("loading").classList.add("hidden");
-        alert("Lỗi tải Google Sheets! Đảm bảo bạn đã bấm 'Xuất bản dạng CSV'.");
+        alert("Lỗi tải Google Sheets! Đảm bảo bạn đã xuất bản dạng CSV.");
       }
     });
   }
 
   function startQuiz() {
     document.getElementById("quiz-area").classList.remove("hidden");
+    // Xáo trộn danh sách từ vựng khi bắt đầu
+    words.sort(() => Math.random() - 0.5);
     currentIndex = 0;
     score = 0;
     document.getElementById("total-val").innerText = words.length;
-    showWord();
+    showQuestion();
   }
 
-  function showWord() {
+  function showQuestion() {
     if (currentIndex >= words.length) {
-      alert(`Hoàn thành bài học! Trả lời đúng: ${score}/${words.length}`);
+      alert(`Chúc mừng! Bạn đã hoàn thành bài luyện tập.\nKết quả: ${score}/${words.length} câu đúng.`);
       return;
     }
-    
-    const current = words[currentIndex];
-    
-    // Lấy dữ liệu hỗ trợ cả tiếng Anh và tiếng Việt
-    const wordVal = getFieldValue(current, ["word", "tu_vung", "tuvung"]);
-    const phoneticVal = getFieldValue(current, ["phonetic", "phien_am", "phienam"]);
-    const typeVal = getFieldValue(current, ["type", "tu_loai", "tuloai", "pos", "part_of_speech"]);
-    const meaningVal = getFieldValue(current, ["meaning", "nghia"]);
-    const exampleVal = getFieldValue(current, ["example", "vi_du", "vidu"]);
 
-    // Hiển thị Từ loại (nếu có)
+    isAnswered = false;
+    document.getElementById("next-btn").style.visibility = "hidden";
+    const current = words[currentIndex];
+
+    // Hiển thị từ Tiếng Anh, Phiên âm, Từ loại
+    document.getElementById("word-text").innerText = getFieldValue(current, ["word", "tu_vung", "tuvung"]);
+    document.getElementById("phonetic-text").innerText = getFieldValue(current, ["phonetic", "phien_am", "phienam"]);
+    
+    const typeVal = getFieldValue(current, ["type", "tu_loai", "tuloai", "pos", "part_of_speech"]);
     const posTag = document.getElementById("pos-text");
     if (typeVal) {
       posTag.innerText = typeVal;
@@ -185,33 +185,68 @@
       posTag.classList.add("hidden");
     }
 
-    document.getElementById("meaning-text").innerText = meaningVal;
-    document.getElementById("phonetic-text").innerText = phoneticVal;
-    document.getElementById("example-text").innerText = exampleVal ? `"${exampleVal}"` : "";
-    document.getElementById("user-input").value = "";
-    document.getElementById("score-val").innerText = score;
-    document.getElementById("user-input").focus();
-  }
+    // Tự động phát âm từ mới
+    speakCurrentWord();
 
-  function checkAnswer() {
-    const input = document.getElementById("user-input").value.trim().toLowerCase();
-    const target = getFieldValue(words[currentIndex], ["word", "tu_vung", "tuvung"]).toLowerCase();
+    // Tạo danh sách 4 lựa chọn (1 đúng, 3 sai ngẫu nhiên)
+    const correctAnswer = getFieldValue(current, ["meaning", "nghia"]);
+    let options = [correctAnswer];
 
-    if (input === target) {
-      score++;
-      speakCurrentWord();
-      currentIndex++;
-      showWord();
-    } else {
-      alert(`Chưa chính xác! Đáp án đúng là: ${target}`);
-      currentIndex++;
-      showWord();
+    while (options.length < 4) {
+      const randomWord = words[Math.floor(Math.random() * words.length)];
+      const randomMeaning = getFieldValue(randomWord, ["meaning", "nghia"]);
+      if (!options.includes(randomMeaning)) {
+        options.push(randomMeaning);
+      }
     }
+
+    // Xáo trộn 4 đáp án A B C D
+    options.sort(() => Math.random() - 0.5);
+
+    // Render 4 nút đáp án ra màn hình
+    const container = document.getElementById("options-container");
+    container.innerHTML = "";
+    const prefixes = ["A", "B", "C", "D"];
+
+    options.forEach((optText, index) => {
+      const btn = document.createElement("button");
+      btn.className = "option-btn";
+      btn.innerHTML = `<span class="option-prefix">${prefixes[index]}.</span> <span>${optText}</span>`;
+      btn.onclick = () => selectOption(btn, optText, correctAnswer);
+      container.appendChild(btn);
+    });
+
+    document.getElementById("score-val").innerText = score;
   }
 
-  function skipWord() {
+  function selectOption(selectedBtn, selectedOption, correctAnswer) {
+    if (isAnswered) return;
+    isAnswered = true;
+
+    const allButtons = document.querySelectorAll(".option-btn");
+    
+    if (selectedOption === correctAnswer) {
+      score++;
+      selectedBtn.classList.add("correct");
+    } else {
+      selectedBtn.classList.add("wrong");
+      // Hiển thị đáp án đúng
+      allButtons.forEach(btn => {
+        if (btn.innerText.includes(correctAnswer)) {
+          btn.classList.add("correct");
+        }
+      });
+    }
+
+    // Vô hiệu hóa chọn lại
+    allButtons.forEach(btn => btn.setAttribute("disabled", "true"));
+    document.getElementById("score-val").innerText = score;
+    document.getElementById("next-btn").style.visibility = "visible";
+  }
+
+  function nextQuestion() {
     currentIndex++;
-    showWord();
+    showQuestion();
   }
 
   function speakCurrentWord() {
@@ -222,10 +257,6 @@
       window.speechSynthesis.speak(utterance);
     }
   }
-
-  document.getElementById("user-input").addEventListener("keyup", function(event) {
-    if (event.key === "Enter") checkAnswer();
-  });
 </script>
 
 </body>
