@@ -36,15 +36,16 @@
     /* Question Card */
     .card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 20px; }
     .english-word { font-size: 2rem; font-weight: bold; color: var(--primary); }
-    .meta-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 6px; }
-    .pos-tag { background: #e0e7ff; color: #4338ca; font-size: 0.85rem; font-weight: 700; padding: 2px 10px; border-radius: 12px; text-transform: lowercase; }
-    .phonetic { color: #64748b; font-size: 1rem; }
+    .phonetic { color: #64748b; font-size: 1rem; margin-top: 4px; }
 
     /* Multiple Choice Options */
     .options-grid { display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px; }
     .option-btn { background: #ffffff; border: 2px solid #e2e8f0; padding: 14px 18px; border-radius: 10px; text-align: left; font-size: 1rem; font-weight: 500; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; }
     .option-btn:hover:not([disabled]) { border-color: var(--primary); background: #f0f5ff; }
-    .option-prefix { font-weight: bold; color: var(--primary); margin-right: 12px; width: 24px; }
+    .option-prefix { font-weight: bold; color: var(--primary); margin-right: 12px; min-width: 24px; }
+    
+    /* Nhãn Từ Loại hiển thị trong từng đáp án */
+    .option-pos { background: #e0e7ff; color: #4338ca; font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 6px; margin-right: 10px; text-transform: lowercase; }
 
     /* Option States */
     .option-btn.correct { background-color: #d1fae5 !important; border-color: var(--success) !important; color: #065f46; }
@@ -77,14 +78,11 @@
   <div id="quiz-area" class="hidden">
     <div class="card">
       <div class="english-word" id="word-text">Word</div>
-      <div class="meta-row">
-        <span class="pos-tag hidden" id="pos-text">n</span>
-        <span class="phonetic" id="phonetic-text">/phonetic/</span>
-      </div>
+      <div class="phonetic" id="phonetic-text">/phonetic/</div>
       <button class="btn-audio" onclick="speakCurrentWord()">🔊 Phát âm</button>
     </div>
 
-    <!-- 4 Đáp án A B C D -->
+    <!-- 4 Đáp án A B C D đi kèm Từ loại -->
     <div class="options-grid" id="options-container"></div>
 
     <div class="controls">
@@ -116,6 +114,7 @@
   }
 
   function getFieldValue(item, keys) {
+    if (!item) return "";
     for (let key of keys) {
       if (item[key] !== undefined && item[key] !== "") return item[key];
     }
@@ -154,7 +153,6 @@
 
   function startQuiz() {
     document.getElementById("quiz-area").classList.remove("hidden");
-    // Xáo trộn danh sách từ vựng khi bắt đầu
     words.sort(() => Math.random() - 0.5);
     currentIndex = 0;
     score = 0;
@@ -172,73 +170,77 @@
     document.getElementById("next-btn").style.visibility = "hidden";
     const current = words[currentIndex];
 
-    // Hiển thị từ Tiếng Anh, Phiên âm, Từ loại
-    document.getElementById("word-text").innerText = getFieldValue(current, ["word", "tu_vung", "tuvung"]);
-    document.getElementById("phonetic-text").innerText = getFieldValue(current, ["phonetic", "phien_am", "phienam"]);
-    
-    const typeVal = getFieldValue(current, ["type", "tu_loai", "tuloai", "pos", "part_of_speech"]);
-    const posTag = document.getElementById("pos-text");
-    if (typeVal) {
-      posTag.innerText = typeVal;
-      posTag.classList.remove("hidden");
-    } else {
-      posTag.classList.add("hidden");
-    }
+    // Hiển thị từ Tiếng Anh & Phiên âm ở thẻ câu hỏi
+    document.getElementById("word-text").innerText = getFieldValue(current, ["word", "tu_vung", "tuvung", "từ vựng"]);
+    document.getElementById("phonetic-text").innerText = getFieldValue(current, ["phonetic", "phien_am", "phienam", "phiên âm"]);
 
-    // Tự động phát âm từ mới
     speakCurrentWord();
 
-    // Tạo danh sách 4 lựa chọn (1 đúng, 3 sai ngẫu nhiên)
-    const correctAnswer = getFieldValue(current, ["meaning", "nghia"]);
-    let options = [correctAnswer];
+    // Tạo đối tượng đáp án đúng chứa cả nghĩa lẫn từ loại
+    const correctObj = {
+      meaning: getFieldValue(current, ["meaning", "nghia", "nghĩa"]),
+      type: getFieldValue(current, ["type", "tu_loai", "tuloai", "từ loại", "pos"])
+    };
 
-    while (options.length < 4) {
+    let options = [correctObj];
+    let usedMeanings = [correctObj.meaning];
+
+    // Lấy ngẫu nhiên 3 đáp án sai kèm theo từ loại của chính từ đó
+    while (options.length < 4 && options.length < words.length) {
       const randomWord = words[Math.floor(Math.random() * words.length)];
-      const randomMeaning = getFieldValue(randomWord, ["meaning", "nghia"]);
-      if (!options.includes(randomMeaning)) {
-        options.push(randomMeaning);
+      const randomMeaning = getFieldValue(randomWord, ["meaning", "nghia", "nghĩa"]);
+      const randomType = getFieldValue(randomWord, ["type", "tu_loai", "tuloai", "từ loại", "pos"]);
+
+      if (!usedMeanings.includes(randomMeaning) && randomMeaning) {
+        usedMeanings.push(randomMeaning);
+        options.push({
+          meaning: randomMeaning,
+          type: randomType
+        });
       }
     }
 
-    // Xáo trộn 4 đáp án A B C D
+    // Xáo trộn vị trí A B C D
     options.sort(() => Math.random() - 0.5);
 
-    // Render 4 nút đáp án ra màn hình
+    // Render 4 nút đáp án A, B, C, D kèm Từ loại
     const container = document.getElementById("options-container");
     container.innerHTML = "";
     const prefixes = ["A", "B", "C", "D"];
 
-    options.forEach((optText, index) => {
+    options.forEach((opt, index) => {
       const btn = document.createElement("button");
       btn.className = "option-btn";
-      btn.innerHTML = `<span class="option-prefix">${prefixes[index]}.</span> <span>${optText}</span>`;
-      btn.onclick = () => selectOption(btn, optText, correctAnswer);
+      
+      const typeHtml = opt.type ? `<span class="option-pos">${opt.type}</span>` : '';
+      btn.innerHTML = `<span class="option-prefix">${prefixes[index]}.</span> ${typeHtml} <span>${opt.meaning}</span>`;
+      
+      btn.onclick = () => selectOption(btn, opt.meaning, correctObj.meaning);
       container.appendChild(btn);
     });
 
     document.getElementById("score-val").innerText = score;
   }
 
-  function selectOption(selectedBtn, selectedOption, correctAnswer) {
+  function selectOption(selectedBtn, selectedMeaning, correctMeaning) {
     if (isAnswered) return;
     isAnswered = true;
 
     const allButtons = document.querySelectorAll(".option-btn");
     
-    if (selectedOption === correctAnswer) {
+    if (selectedMeaning === correctMeaning) {
       score++;
       selectedBtn.classList.add("correct");
     } else {
       selectedBtn.classList.add("wrong");
-      // Hiển thị đáp án đúng
+      // Đánh dấu xanh đáp án đúng
       allButtons.forEach(btn => {
-        if (btn.innerText.includes(correctAnswer)) {
+        if (btn.innerText.includes(correctMeaning)) {
           btn.classList.add("correct");
         }
       });
     }
 
-    // Vô hiệu hóa chọn lại
     allButtons.forEach(btn => btn.setAttribute("disabled", "true"));
     document.getElementById("score-val").innerText = score;
     document.getElementById("next-btn").style.visibility = "visible";
@@ -250,7 +252,7 @@
   }
 
   function speakCurrentWord() {
-    const targetWord = getFieldValue(words[currentIndex], ["word", "tu_vung", "tuvung"]);
+    const targetWord = getFieldValue(words[currentIndex], ["word", "tu_vung", "tuvung", "từ vựng"]);
     if ('speechSynthesis' in window && targetWord) {
       const utterance = new SpeechSynthesisUtterance(targetWord);
       utterance.lang = 'en-US';
