@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Học Từ Vựng Tiếng Anh - Google Sheets</title>
+  <title>Học Từ Vựng Google Sheets</title>
   <!-- Thư viện PapaParse để đọc dữ liệu CSV từ Google Sheets -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
   <style>
@@ -32,7 +32,10 @@
     .btn-secondary { background: #e2e8f0; color: #475569; }
     .btn-audio { background: #10b981; }
 
+    /* Flashcard Style */
     .card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 20px; }
+    .meaning-row { display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .pos-tag { background: #e0e7ff; color: #4338ca; font-size: 0.8rem; font-weight: 700; padding: 2px 8px; border-radius: 12px; text-transform: lowercase; }
     .meaning { font-size: 1.3rem; font-weight: bold; color: #0f172a; }
     .phonetic { color: #64748b; margin-top: 6px; font-size: 1rem; }
     .example { font-style: italic; color: #475569; margin-top: 10px; font-size: 0.95rem; }
@@ -51,7 +54,7 @@
 <div class="container">
   <h1>Học Từ Vựng Google Sheets</h1>
 
-  <!-- Ô cấu hình Link Google Sheets -->
+  <!-- Configuration Panel -->
   <div class="config-panel">
     <label for="sheet-url">Dán link Google Sheets (.csv) đã xuất bản:</label>
     <div class="input-group">
@@ -60,12 +63,15 @@
     </div>
   </div>
 
-  <div id="loading" class="loading hidden">Đang tải từ vựng từ Google Sheets...</div>
+  <div id="loading" class="loading hidden">Đang tải dữ liệu từ Google Sheets...</div>
 
-  <!-- Khu vực học từ vựng -->
+  <!-- Quiz Area -->
   <div id="quiz-area" class="hidden">
     <div class="card">
-      <div class="meaning" id="meaning-text">Ý nghĩa từ vựng</div>
+      <div class="meaning-row">
+        <span class="pos-tag hidden" id="pos-text">n</span>
+        <span class="meaning" id="meaning-text">Ý nghĩa từ vựng</span>
+      </div>
       <div class="phonetic" id="phonetic-text">/phiên âm/</div>
       <div class="example" id="example-text">Ví dụ...</div>
     </div>
@@ -90,7 +96,6 @@
   let currentIndex = 0;
   let score = 0;
 
-  // Tự động load link cũ nếu đã từng lưu
   window.onload = function() {
     const savedUrl = localStorage.getItem("gg_sheet_csv_url");
     if (savedUrl) {
@@ -106,6 +111,16 @@
     fetchGoogleSheetData(url);
   }
 
+  // Hàm hỗ trợ tìm giá trị theo nhiều khả năng tên cột
+  function getFieldValue(item, keys) {
+    for (let key of keys) {
+      if (item[key] !== undefined && item[key] !== "") {
+        return item[key];
+      }
+    }
+    return "";
+  }
+
   function fetchGoogleSheetData(url) {
     document.getElementById("loading").classList.remove("hidden");
     document.getElementById("quiz-area").classList.add("hidden");
@@ -116,24 +131,24 @@
       skipEmptyLines: true,
       complete: function(results) {
         document.getElementById("loading").classList.add("hidden");
-        // Chuẩn hóa key chữ thường
+        
         words = results.data.map(row => {
           let cleanRow = {};
           for (let key in row) {
             cleanRow[key.trim().toLowerCase()] = row[key].trim();
           }
           return cleanRow;
-        }).filter(item => item.word); // Lọc các hàng có từ vựng
+        }).filter(item => getFieldValue(item, ["word", "tu_vung", "tuvung"]));
 
         if (words.length > 0) {
           startQuiz();
         } else {
-          alert("Không tìm thấy dữ liệu từ vựng! Hãy kiểm tra lại file Google Sheets.");
+          alert("Không tìm thấy từ vựng! Kiểm tra lại file Google Sheets.");
         }
       },
-      error: function(err) {
+      error: function() {
         document.getElementById("loading").classList.add("hidden");
-        alert("Lỗi khi tải Google Sheets: Hãy chắc chắn bạn đã chọn 'Xuất bản (.csv)'!");
+        alert("Lỗi tải Google Sheets! Đảm bảo bạn đã bấm 'Xuất bản dạng CSV'.");
       }
     });
   }
@@ -148,13 +163,31 @@
 
   function showWord() {
     if (currentIndex >= words.length) {
-      alert(`Chúc mừng! Bạn đã hoàn thành bài học. Trả lời đúng: ${score}/${words.length}`);
+      alert(`Hoàn thành bài học! Trả lời đúng: ${score}/${words.length}`);
       return;
     }
+    
     const current = words[currentIndex];
-    document.getElementById("meaning-text").innerText = current.meaning || "";
-    document.getElementById("phonetic-text").innerText = current.phonetic || "";
-    document.getElementById("example-text").innerText = current.example ? `"${current.example}"` : "";
+    
+    // Lấy dữ liệu hỗ trợ cả tiếng Anh và tiếng Việt
+    const wordVal = getFieldValue(current, ["word", "tu_vung", "tuvung"]);
+    const phoneticVal = getFieldValue(current, ["phonetic", "phien_am", "phienam"]);
+    const typeVal = getFieldValue(current, ["type", "tu_loai", "tuloai", "pos", "part_of_speech"]);
+    const meaningVal = getFieldValue(current, ["meaning", "nghia"]);
+    const exampleVal = getFieldValue(current, ["example", "vi_du", "vidu"]);
+
+    // Hiển thị Từ loại (nếu có)
+    const posTag = document.getElementById("pos-text");
+    if (typeVal) {
+      posTag.innerText = typeVal;
+      posTag.classList.remove("hidden");
+    } else {
+      posTag.classList.add("hidden");
+    }
+
+    document.getElementById("meaning-text").innerText = meaningVal;
+    document.getElementById("phonetic-text").innerText = phoneticVal;
+    document.getElementById("example-text").innerText = exampleVal ? `"${exampleVal}"` : "";
     document.getElementById("user-input").value = "";
     document.getElementById("score-val").innerText = score;
     document.getElementById("user-input").focus();
@@ -162,7 +195,7 @@
 
   function checkAnswer() {
     const input = document.getElementById("user-input").value.trim().toLowerCase();
-    const target = (words[currentIndex].word || "").toLowerCase();
+    const target = getFieldValue(words[currentIndex], ["word", "tu_vung", "tuvung"]).toLowerCase();
 
     if (input === target) {
       score++;
@@ -170,7 +203,7 @@
       currentIndex++;
       showWord();
     } else {
-      alert(`Chưa chính xác! Đáp án đúng là: ${words[currentIndex].word}`);
+      alert(`Chưa chính xác! Đáp án đúng là: ${target}`);
       currentIndex++;
       showWord();
     }
@@ -182,7 +215,7 @@
   }
 
   function speakCurrentWord() {
-    const targetWord = words[currentIndex]?.word;
+    const targetWord = getFieldValue(words[currentIndex], ["word", "tu_vung", "tuvung"]);
     if ('speechSynthesis' in window && targetWord) {
       const utterance = new SpeechSynthesisUtterance(targetWord);
       utterance.lang = 'en-US';
