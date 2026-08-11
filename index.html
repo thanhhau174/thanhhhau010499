@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Học Từ Vựng Tiếng Anh - Google Sheets</title>
+  <!-- Thư viện PapaParse để đọc dữ liệu CSV từ Google Sheets -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --primary-hover: #4338ca;
+      --bg: #f3f4f6;
+      --card-bg: #ffffff;
+      --text: #1f2937;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+    body { background-color: var(--bg); color: var(--text); padding: 20px; display: flex; justify-content: center; min-height: 100vh; }
+    
+    .container { width: 100%; max-width: 600px; background: var(--card-bg); padding: 24px; border-radius: 16px; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.1); }
+    h1 { text-align: center; color: var(--primary); margin-bottom: 20px; font-size: 1.5rem; }
+
+    .config-panel { background: #f8fafc; padding: 16px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
+    .config-panel label { font-size: 0.85rem; font-weight: 600; color: #64748b; display: block; margin-bottom: 6px; }
+    .input-group { display: flex; gap: 8px; }
+    input[type="text"] { flex: 1; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; outline: none; }
+    input[type="text"]:focus { border-color: var(--primary); }
+
+    .btn { background: var(--primary); color: white; border: none; padding: 10px 16px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: 0.2s; }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-secondary { background: #e2e8f0; color: #475569; }
+    .btn-audio { background: #10b981; }
+
+    .card { background: #f8fafc; border: 2px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 20px; }
+    .meaning { font-size: 1.3rem; font-weight: bold; color: #0f172a; }
+    .phonetic { color: #64748b; margin-top: 6px; font-size: 1rem; }
+    .example { font-style: italic; color: #475569; margin-top: 10px; font-size: 0.95rem; }
+
+    .word-input { width: 100%; font-size: 1.2rem; text-align: center; padding: 12px; border: 2px solid #cbd5e1; border-radius: 8px; outline: none; }
+    .word-input:focus { border-color: var(--primary); }
+
+    .controls { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+    .score { font-weight: 600; color: #059669; }
+    .hidden { display: none; }
+    .loading { text-align: center; color: #64748b; margin: 10px 0; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Học Từ Vựng Google Sheets</h1>
+
+  <!-- Ô cấu hình Link Google Sheets -->
+  <div class="config-panel">
+    <label for="sheet-url">Dán link Google Sheets (.csv) đã xuất bản:</label>
+    <div class="input-group">
+      <input type="text" id="sheet-url" placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv">
+      <button class="btn" onclick="saveAndLoadSheet()">Nạp dữ liệu</button>
+    </div>
+  </div>
+
+  <div id="loading" class="loading hidden">Đang tải từ vựng từ Google Sheets...</div>
+
+  <!-- Khu vực học từ vựng -->
+  <div id="quiz-area" class="hidden">
+    <div class="card">
+      <div class="meaning" id="meaning-text">Ý nghĩa từ vựng</div>
+      <div class="phonetic" id="phonetic-text">/phiên âm/</div>
+      <div class="example" id="example-text">Ví dụ...</div>
+    </div>
+
+    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+      <input type="text" id="user-input" class="word-input" placeholder="Gõ từ tiếng Anh tương ứng..." autocomplete="off">
+      <button class="btn btn-audio" onclick="speakCurrentWord()">🔊 Phát âm</button>
+    </div>
+
+    <div class="controls">
+      <div class="score">Tiến độ: <span id="score-val">0</span>/<span id="total-val">0</span></div>
+      <div>
+        <button class="btn btn-secondary" onclick="skipWord()">Bỏ qua</button>
+        <button class="btn" onclick="checkAnswer()">Kiểm tra</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let words = [];
+  let currentIndex = 0;
+  let score = 0;
+
+  // Tự động load link cũ nếu đã từng lưu
+  window.onload = function() {
+    const savedUrl = localStorage.getItem("gg_sheet_csv_url");
+    if (savedUrl) {
+      document.getElementById("sheet-url").value = savedUrl;
+      fetchGoogleSheetData(savedUrl);
+    }
+  };
+
+  function saveAndLoadSheet() {
+    const url = document.getElementById("sheet-url").value.trim();
+    if (!url) return alert("Vui lòng nhập link CSV Google Sheets!");
+    localStorage.setItem("gg_sheet_csv_url", url);
+    fetchGoogleSheetData(url);
+  }
+
+  function fetchGoogleSheetData(url) {
+    document.getElementById("loading").classList.remove("hidden");
+    document.getElementById("quiz-area").classList.add("hidden");
+
+    Papa.parse(url, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: function(results) {
+        document.getElementById("loading").classList.add("hidden");
+        // Chuẩn hóa key chữ thường
+        words = results.data.map(row => {
+          let cleanRow = {};
+          for (let key in row) {
+            cleanRow[key.trim().toLowerCase()] = row[key].trim();
+          }
+          return cleanRow;
+        }).filter(item => item.word); // Lọc các hàng có từ vựng
+
+        if (words.length > 0) {
+          startQuiz();
+        } else {
+          alert("Không tìm thấy dữ liệu từ vựng! Hãy kiểm tra lại file Google Sheets.");
+        }
+      },
+      error: function(err) {
+        document.getElementById("loading").classList.add("hidden");
+        alert("Lỗi khi tải Google Sheets: Hãy chắc chắn bạn đã chọn 'Xuất bản (.csv)'!");
+      }
+    });
+  }
+
+  function startQuiz() {
+    document.getElementById("quiz-area").classList.remove("hidden");
+    currentIndex = 0;
+    score = 0;
+    document.getElementById("total-val").innerText = words.length;
+    showWord();
+  }
+
+  function showWord() {
+    if (currentIndex >= words.length) {
+      alert(`Chúc mừng! Bạn đã hoàn thành bài học. Trả lời đúng: ${score}/${words.length}`);
+      return;
+    }
+    const current = words[currentIndex];
+    document.getElementById("meaning-text").innerText = current.meaning || "";
+    document.getElementById("phonetic-text").innerText = current.phonetic || "";
+    document.getElementById("example-text").innerText = current.example ? `"${current.example}"` : "";
+    document.getElementById("user-input").value = "";
+    document.getElementById("score-val").innerText = score;
+    document.getElementById("user-input").focus();
+  }
+
+  function checkAnswer() {
+    const input = document.getElementById("user-input").value.trim().toLowerCase();
+    const target = (words[currentIndex].word || "").toLowerCase();
+
+    if (input === target) {
+      score++;
+      speakCurrentWord();
+      currentIndex++;
+      showWord();
+    } else {
+      alert(`Chưa chính xác! Đáp án đúng là: ${words[currentIndex].word}`);
+      currentIndex++;
+      showWord();
+    }
+  }
+
+  function skipWord() {
+    currentIndex++;
+    showWord();
+  }
+
+  function speakCurrentWord() {
+    const targetWord = words[currentIndex]?.word;
+    if ('speechSynthesis' in window && targetWord) {
+      const utterance = new SpeechSynthesisUtterance(targetWord);
+      utterance.lang = 'en-US';
+      window.speechSynthesis.speak(utterance);
+    }
+  }
+
+  document.getElementById("user-input").addEventListener("keyup", function(event) {
+    if (event.key === "Enter") checkAnswer();
+  });
+</script>
+
+</body>
+</html>
